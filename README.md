@@ -515,6 +515,7 @@ describe("Cart", () => {
   ```
   Never initialize a variable outside the beforeEach. Always do the initialization inside of the beforeEach or your it functions.
 
+  **<font size="5"> Effectively Testing Production Code</font>**
 
 **Boundary testing**
 Is a way to assure that the code works when you hit natural boundaries in the parameters that are involved in a piece of code, and look at how we might test those boundaries.
@@ -659,4 +660,170 @@ empty() {
 We want to make sure that when we clean out the lineItems, that we actually are assigning a brand new object to the lineItems property and we don´t have the same object anymore.
 Even though the shapes are identical, they were both empty arrays. We are now checking that they are different objects.
 
-  **<font size="5"> Effectively Testing Production Code</font>**
+
+  **<font size="5">Testing async code, Promises and Test Coverage</font>**
+
+**Callbacks**
+```js script
+  module.exports = (cart, cb) => {
+    // send cart info to server
+    setTimeout(() => {
+      // notify that order was success
+        cb(true)
+    }, 500)
+}
+
+it('should call the callback with a true vale', ()=> {
+        let cart = {};
+        let  success;
+
+        let cb = (p1)=>{
+            success = p1; // it isn´t getting called inmediately, so it´s getting skipped.
+        }
+
+        order(cart, cb)
+
+        expect(success).to.be.true; // it would be undefined because it skipped the callback
+    })
+```
+
+The "right" way to test it would be:
+
+```js script
+it('should call the callback with a true vale', ()=> {
+        let cart = {};
+        let  success;
+
+        let cb = (p1)=>{
+            success = p1;
+            expect(success).to.be.true;
+        }
+
+        order(cart, cb)
+
+    })
+```
+
+But there is a problem. We aren´t making sure that the callback was ever called, and so that expect statement which is inside of the callback, doesn´t necessarily have to be run and therefore the test might be showing passing, because it´s never actually running our assertion portion.
+
+Mocha helps us with this asynchronous code with the **done** parameter.
+
+Mocha will know once we accpet this parameter, that this is anasyncrhonous test, and therefore it will fail the test if that done parameter isn´t called.
+
+```js script
+it('should call the callback with a true vale', (done)=> {
+        let cart = {};
+        let  success;
+
+        let cb = (p1)=>{
+            success = p1;
+            expect(success).to.be.true;
+            done()                       // call done parameter
+        }
+
+        order(cart, cb)
+
+    })
+```
+
+**Promises**
+A promise testing should have a return and use the .then().
+
+The following code is not actually passing the test. If I change the 500 to 600 in the code it will still work or I delete the line of resolve or change it by reject it will pass the test. It would be a false positive.
+
+The done parameter can´t be used here, it will throw a Timeout.
+```js script
+module.exports = (cart) => {
+    let p = new Promise((resolve, reject)=> {
+        resolve(500)
+    })
+    return p;
+}
+
+
+it('should deal with promises', ()=> {
+  let cart = {};
+
+  order(cart).then(total => {
+    expect(total).to.equal(500);
+  })
+})
+```
+
+What we need to do is to return the promise
+```js script
+it('should deal with promises', ()=> {
+  let cart = {};
+
+  return order(cart).then(total => {
+    expect(total).to.equal(500);
+  })
+})
+```
+
+**Testing Thrown Errors**
+
+The way that Mocha works is if an exception is thrown inside of a test then Mocha considers that to be a failing test so what we want to dp is tell Mocha "this is what we want".
+So we wrap the checkout function inside of its own function and we don´t invoke it, we only pass it in the expect. Mocha detects that that was a function that I gave it, and it´s going to call it on its own.
+
+```js script
+it('should deal with promises', ()=> {
+  let cart = {};
+
+  let callCheckout = ()=>{ checkout(null, cart)};
+  expect(callCheckout).to.throw();
+  })
+})
+```
+
+**Test Coverage**
+It tells me what code in the project has been covered by unit tests and what hasn´t.
+```js script
+npm i -D nyc
+
+```
+In the package.json add the following in the scripts:
+```js script
+  "coverage": "nyc npm run test"
+```
+Run it with:
+```js script
+npm run coverage
+
+
+File                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+--------------------|---------|----------|---------|---------|-------------------
+All files           |   83.81 |       40 |   78.57 |   83.62 | 
+ app                |   77.41 |      100 |   63.63 |   77.41 | 
+  display.js        |   36.36 |      100 |       0 |   36.36 | 8-27
+  order.js          |     100 |      100 |     100 |     100 | 
+  order.spec.js     |     100 |      100 |     100 |     100 | 
+  part.spec.js      |     100 |      100 |     100 |     100 | 
+  parts.js          |     100 |      100 |     100 |     100 | 
+ app/commands       |   69.81 |       25 |   78.57 |   69.23 | 
+  Checkout.js       |   26.66 |        0 |       0 |   26.66 | 6-22
+  checkout.spec.js  |     100 |      100 |     100 |     100 | 
+  utilities.js      |   54.54 |       50 |      50 |   54.54 | 5-10
+  utilities.spec.js |     100 |      100 |     100 |     100 | 
+ app/models         |   94.38 |      100 |   83.87 |   94.31 | 
+  Cart.js           |   78.57 |      100 |   66.66 |   76.92 | 26-31
+  Part.js           |   77.77 |      100 |   33.33 |   77.77 | 19-23
+  cart.spec.js      |     100 |      100 |     100 |     100 | 
+--------------------|---------|----------|---------|---------|-------------------
+```
+
+Since Mocha is configured in watch mode, you have to terminate the process to see the coverage.
+
+To tell istanbul don´t report on our spec files:
+1. Create a file .nycrc
+```js script
+{
+  "all": true,
+  "include": [
+    "app/**/*.js"
+  ],
+  "exclude": [
+    "**/*.spec.js"
+  ]
+}
+```
