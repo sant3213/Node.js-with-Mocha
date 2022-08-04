@@ -457,4 +457,206 @@ utilities
 after 
 ```
 
+**Example of using beforeEach**
+This code could be replaced since I use the declaration of cart and myPart in both tests:
+```js script
+describe("Cart", () => {
+
+  describe("addItem", () => {
+
+    it("should have only 1 item with a qty of 1 after addItem is called on a fresh cart with a qty of 1", () => {
+      const cart = new Cart();
+      const myPart = {};
+
+      cart.addItem(myPart, 1);
+
+      expect(cart.lineItems.length).to.equal(1);
+      expect(cart.lineItems[0].quantity).to.equal(1);
+    });
+
+    it("should have only 1 item with a qty of 1 after addItem is called on a fresh cart with a qty of 1", () => {
+        const cart = new Cart();
+        const myPart = {};
+  
+        cart.addItem(myPart, 1);
+        cart.addItem(myPart, 1);
+  
+        expect(cart.lineItems.length).to.equal(1);
+        expect(cart.lineItems[0].quantity).to.equal(2);
+      });
+  });
+});
+```
+Using *beforeEach*:
+
+```js script
+describe("Cart", () => {
+
+  describe("addItem", () => {
+    let cart, myPart;
+
+    beforeEach(()=>{
+        cart = new Cart();
+        myPart = {};
+    })
+
+    it("should have only 1 item with a qty of 1 after addItem is called on a fresh cart with a qty of 1", () => {
+
+        cart.addItem(myPart, 1);
+
+        expect(cart.lineItems.length).to.equal(1);
+        expect(cart.lineItems[0].quantity).to.equal(1);
+    });
+
+    it("should have only 1 item with a qty of 1 after addItem is called on a fresh cart with a qty of 1", () => {
+      .
+      .
+      .
+  ```
+  Never initialize a variable outside the beforeEach. Always do the initialization inside of the beforeEach or your it functions.
+
+
+**Boundary testing**
+Is a way to assure that the code works when you hit natural boundaries in the parameters that are involved in a piece of code, and look at how we might test those boundaries.
+There are probably three natural boundaries that we might want to consider.
+* **No items** (nothing, 0, etc): What if we have no items tin the cart? The algorithm for summing up the items and printing them out may or not work if there´s no items in the cart because the programmer may or may not have considered that scenario.
+
+* **1 item**: The algorithm to sum up and display the total cost of a list of just one item might have been written differently than for multiple items.
+
+* **Multiple items**
+
+Normally a good rule of thumb is the nuber of branches in a line of code are the number of tests that you might want to write. But getTotalCost actually has no branching and yet by looking at the boundaries, we´ve come up with three scenarios that would be good scenarios to write for our test.
+
+```js script
+// Sums up the costs and quantities of the items that are in the cart and adds them all into a single number.
+getTotalCost() {
+        return this.lineItems.reduce((p, c) => {
+            return p + c.part.cost * c.quantity;
+        }, 0);
+    }
+
+describe("getTotalCost", () => {
+    let cart;
+
+    beforeEach('getTotalCost', ()=> {
+        cart = new Cart();        
+    })
+
+    it('should be 0 with no items', ()=>{
+        expect(cart.getTotalCost()).to.equal(0);
+    })
+
+    it('should be 5 with one item with a qty of 1 and cost of 5', ()=>{
+        let myPart1 = {cost: 5};
+        cart.addItem(myPart1, 1);
+
+        expect(cart.getTotalCost()).to.equal(5);
+    })
+
+    it('should be 15 with one item with a qty cost of 5, and another item qty 1, cost 10', ()=>{
+        let myPart1 = {cost: 5};
+        let myPart2 = {cost: 10};
+        cart.addItem(myPart1, 1);
+        cart.addItem(myPart2, 1);
+
+        expect(cart.getTotalCost()).to.equal(15);
+    })
+})
+  ```
+
+**Parameterized Tests**
+In the last test we can see that each of these tests is a variation of the same thing with two different parameters: one parameter is what does the lineItems array look like ant the other parameter is what should the total cost be when you call getTotalCost?.
+
+In the first test, it´s 0 item in the array and a total cost of 0, in the second scenario it´s 1 item in the array with a quantity of 1, cost of 5 and a total cost of 5.
+
+Because of that we could theoretically codify these variations into a single array.
+
+```js script
+ describe("getTotalCost variations", () => {
+        let partCost5 = {cost: 5};
+        let partCost10 = {cost: 10};
+        let emptyLineItems = [];
+        let singleItemLineItems = [{part: partCost5, quantity: 1}]
+        let multipleLineItems = [{part: partCost5, quantity: 1}, {part: partCost10, quantity: 1}]
+    
+        let testVariations = [
+            {lineItems: emptyLineItems, expected: 0},
+            {lineItems: singleItemLineItems, expected: 5},
+            {lineItems: multipleLineItems, expected: 15},
+        ];
+    
+        testVariations.forEach( test=> {
+            it(`correctly calculates the total cost with ${test.lineItems.length} items`, ()=>{
+                cart.lineItems = test.lineItems;
+                expect(cart.getTotalCost()).to.equal(test.expected);
+            })
+        })
+    
+      })
+```
+
+The equal matcher operator checks that the item that is inside of the equal function is the same as the item that´s in the expect function. For primitive values, it doesn´t matter, a three and a three compare the same, but **for items with identity comparisons** such as arrays and objects, this becomes simply an identity comparison, and it checks that the **item** is exactly the same item.
+
+But sometimes you want to know if the item has the right shape. For exampple, an object has certain number of properties, each with a certain value, but we don´t necessarily want to compare identity.
+
+With equal we see that the error says it is expecting an empty array to equal an empty array. It is doing an identity comparison.
+
+```js script
+it('should be 0 with no items', () => {
+      let empty = [];
+      
+      cart.lineItems = [{}, {}];
+
+      cart.empty();
+
+      expect(cart.lineItems).to.equal(empty);
+    })
+
+ AssertionError: expected [] to equal []
+      + expected - actual
+```
+**eql** function is a deep comparison operator. Whe you pass eql an object or an array, it will look inside that object or array and make sure that its shape is the same as the shape of the object or array that we passed into the expect funciton.
+
+This gives us the opportunity  to compare just *the shapes of object rather than the identity of the objects.*
+We want the shape to be similar, we don´t want them to be the exact same instance of the object, but we want them both to be empty arrays.
+```js script
+
+ it('should be 0 with no items', () => {
+      let empty = [];
+      
+      cart.lineItems = [{}, {}];
+
+      cart.empty();
+
+      expect(cart.lineItems).to.eql(empty);
+    })
+
+     should have empty array
+      ✔ should be 0 with no items
+```
+
+Optimizing the test with eql:
+
+```js script
+  it("should have only 1 item with a qty of 1 after addItem is called on a fresh cart with a qty of 1", () => {
+
+      cart.addItem(myPart, 1);
+      //expect(cart.lineItems.length).to.equal(1);
+      //expect(cart.lineItems[0].quantity).to.equal(1);
+      expect(cart.lineItems).to.eql([{part:{}, quantity:1}])
+    });
+
+```
+
+**Testing identity**
+In this test, we are checking that they are different objects.
+As you see, in this method we are assigning a brand new object
+```js script
+empty() {
+        this.lineItems = []
+    }
+```
+We want to make sure that when we clean out the lineItems, that we actually are assigning a brand new object to the lineItems property and we don´t have the same object anymore.
+Even though the shapes are identical, they were both empty arrays. We are now checking that they are different objects.
+
   **<font size="5"> Effectively Testing Production Code</font>**
